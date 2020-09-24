@@ -1,8 +1,9 @@
-package codes.unwritten.vertx.kotlin.rpc
+package com.ooooonly.vertx.kotlin.rpc
 
 import kotlin.reflect.full.callSuspend
 
-internal interface RpcServiceInstance {
+
+interface RpcServiceInstance {
     suspend fun processRequest(request: RpcRequest): RpcResponse
 
     companion object {

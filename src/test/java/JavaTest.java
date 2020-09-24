@@ -1,6 +1,6 @@
-import codes.unwritten.vertx.kotlin.rpc.RpcServerVerticle;
+import com.ooooonly.vertx.kotlin.rpc.RpcServerVerticle;
 
-import static codes.unwritten.vertx.kotlin.rpc.ServiceProxyFactory.getAsyncServiceProxy;
+import static com.ooooonly.vertx.kotlin.rpc.ServiceProxyFactory.getAsyncServiceProxy;
 
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;

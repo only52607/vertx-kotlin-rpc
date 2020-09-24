@@ -1,4 +1,4 @@
-package codes.unwritten.vertx.kotlin.rpc
+package com.ooooonly.vertx.kotlin.rpc
 
 import io.vertx.core.Handler
 import io.vertx.core.Vertx

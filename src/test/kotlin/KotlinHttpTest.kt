@@ -1,5 +1,5 @@
-import codes.unwritten.vertx.kotlin.rpc.HttpRpcHandler
-import codes.unwritten.vertx.kotlin.rpc.getHttpServiceProxy
+import com.ooooonly.vertx.kotlin.rpc.HttpRpcHandler
+import com.ooooonly.vertx.kotlin.rpc.getHttpServiceProxy
 import io.vertx.core.Vertx
 import io.vertx.ext.unit.TestContext
 import io.vertx.ext.unit.junit.RunTestOnContext

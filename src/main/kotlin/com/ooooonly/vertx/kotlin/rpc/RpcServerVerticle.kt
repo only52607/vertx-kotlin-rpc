@@ -1,16 +1,18 @@
-package codes.unwritten.vertx.kotlin.rpc
+package com.ooooonly.vertx.kotlin.rpc
 
 import io.vertx.kotlin.coroutines.CoroutineVerticle
 import io.vertx.kotlin.coroutines.dispatcher
 import io.vertx.kotlin.coroutines.toChannel
 import kotlinx.coroutines.launch
+import java.lang.reflect.InvocationTargetException
 
 /**
  * RpcServerVerticle hosts all RPC service objects
  * @constructor Create a Verticle to host RPC services
  * @param channel Name of the eventbus channel
  */
-class RpcServerVerticle(private val channel: String) : CoroutineVerticle() {
+class RpcServerVerticle(val channel: String) : CoroutineVerticle() {
+
     private val services: HashMap<String, RpcServiceInstance> = hashMapOf()
 
     override suspend fun start() {
@@ -24,6 +26,9 @@ class RpcServerVerticle(private val channel: String) : CoroutineVerticle() {
                                     ?: throw NoSuchElementException("Service $service not found"))
                         }
                     } catch (e: Throwable) {
+                        if(e is InvocationTargetException){
+                            msg.fail(1, e.targetException.message)
+                        }
                         msg.fail(1, e.message)
                     }
                 }

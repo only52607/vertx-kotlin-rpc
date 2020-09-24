@@ -1,10 +1,11 @@
 @file:Suppress("unused")
 
-package codes.unwritten.vertx.kotlin.rpc
+package com.ooooonly.vertx.kotlin.rpc
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
+import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Handler
@@ -15,6 +16,7 @@ import io.vertx.core.json.Json
 import io.vertx.ext.web.client.HttpRequest
 import io.vertx.ext.web.client.HttpResponse
 import io.vertx.ext.web.client.WebClient
+import org.objenesis.strategy.StdInstantiatorStrategy
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.lang.reflect.Proxy
@@ -23,18 +25,33 @@ import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+
 // TODO: Register parameter and return type on the fly and disable this, for security concerns
-private val kryo = Kryo().apply {
-    isRegistrationRequired = false
+//private val kryo = Kryo().apply {
+//    isRegistrationRequired = false
+//}
+
+private const val MAX_BUFFER_SIZE = 100000
+
+private val kryoLocal: ThreadLocal<Kryo> = object : ThreadLocal<Kryo>() {
+    override fun initialValue(): Kryo? {
+        val kryo = Kryo().apply {
+            isRegistrationRequired = false
+        }
+        kryo.instantiatorStrategy = DefaultInstantiatorStrategy(
+                StdInstantiatorStrategy())
+        return kryo
+    }
 }
+
 
 @Suppress("ArrayInDataClass")
 data class RpcRequest(val service: String = "",
                       val method: String = "",
                       val args: Array<out Any?> = arrayOf()) {
     fun toBytes(): ByteArray = ByteArrayOutputStream().use {
-        val out = Output(it)
-        kryo.writeObject(out, this)
+        val out = Output(it,MAX_BUFFER_SIZE)
+        kryoLocal.get().writeObject(out, this)
         out.flush()
         out.buffer
     }
@@ -43,15 +60,15 @@ data class RpcRequest(val service: String = "",
 }
 
 fun ByteArray.toRpcRequest(): RpcRequest = ByteArrayInputStream(this).use {
-    (kryo.readObject(Input(it), RpcRequest::class.java) as RpcRequest)
+    (kryoLocal.get().readObject(Input(it,MAX_BUFFER_SIZE), RpcRequest::class.java) as RpcRequest)
 }
 
 fun Buffer.toRpcRequest(): RpcRequest = bytes.toRpcRequest()
 
 data class RpcResponse(val response: Any? = null, val trace: Json? = null) {
     fun toBytes(): ByteArray = ByteArrayOutputStream().use {
-        val out = Output(it)
-        kryo.writeObject(out, this)
+        val out = Output(it,MAX_BUFFER_SIZE)
+        kryoLocal.get().writeObject(out, this)
         out.flush()
         out.buffer
     }
@@ -60,12 +77,12 @@ data class RpcResponse(val response: Any? = null, val trace: Json? = null) {
 }
 
 fun ByteArray.toRpcResponse(): RpcResponse = ByteArrayInputStream(this).use {
-    (kryo.readObject(Input(it), RpcResponse::class.java) as RpcResponse)
+    (kryoLocal.get().readObject(Input(it,MAX_BUFFER_SIZE), RpcResponse::class.java) as RpcResponse)
 }
 
 fun Buffer.toRpcResponse(): RpcResponse = bytes.toRpcResponse()
 
-inline fun <reified T : Any> getProxyWithBlock(name: String, crossinline block: (RpcRequest, Continuation<Any?>) -> Unit) =
+inline fun <reified T : Any> getProxyWithBlock(serviceName: String, crossinline block: (RpcRequest, Continuation<Any?>) -> Unit) =
         Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, args: Array<Any?> ->
             val lastArg = args.lastOrNull()
             if (lastArg is Continuation<*>) {
@@ -73,7 +90,7 @@ inline fun <reified T : Any> getProxyWithBlock(name: String, crossinline block: 
                 @Suppress("UNCHECKED_CAST") val cont = lastArg as Continuation<Any?>
                 val argsButLast = args.take(args.size - 1)
                 // Call the block with the request and the continuation
-                block(RpcRequest(name, method.name, argsButLast.toTypedArray()), cont)
+                block(RpcRequest(serviceName, method.name, argsButLast.toTypedArray()), cont)
                 // Suspend the coroutine to wait for the reply
                 COROUTINE_SUSPENDED
             } else {
@@ -89,9 +106,10 @@ inline fun <reified T : Any> getProxyWithBlock(name: String, crossinline block: 
  * @param name Name of the service
  * @return RPC proxy object implements T
  */
-inline fun <reified T : Any> getServiceProxy(vertx: Vertx, channel: String, name: String) =
-        getProxyWithBlock(name) { req, cont ->
-            vertx.eventBus().send(channel, req.toBytes(), Handler<AsyncResult<Message<ByteArray>>> { event ->
+
+inline fun <reified T : Any> Vertx.getServiceProxy(channel: String, serviceName: String = "") =
+        getProxyWithBlock(serviceName) { req, cont ->
+            eventBus().request(channel, req.toBytes(), Handler<AsyncResult<Message<ByteArray>>> { event ->
                 // Resume the suspended coroutine on reply
                 if (event?.succeeded() == true) {
                     cont.resume(event.result().body().toRpcResponse().response)
@@ -114,8 +132,8 @@ inline fun <reified T : Any> getServiceProxy(vertx: Vertx, channel: String, name
 @Suppress("UNCHECKED_CAST")
 fun <T : Any> getAsyncServiceProxy(vertx: Vertx, channel: String, name: String, clazz: Class<T>) =
         Proxy.newProxyInstance(clazz.classLoader, arrayOf(clazz)) { _, method, args: Array<Any?> ->
-            val future = Future.future<Message<ByteArray>>()
-            vertx.eventBus().send(channel, RpcRequest(name, method.name, args).toBytes(), future.completer())
+            val future = Future.succeededFuture<Message<ByteArray>>()
+            vertx.eventBus().request(channel, RpcRequest(name, method.name, args).toBytes(), future.completer())
             future.map {
                 it.body().toRpcResponse().response
             }
@@ -161,7 +179,7 @@ fun <T : Any> getAsyncHttpServiceProxy(vertx: Vertx, endpoint: String, name: Str
     val client = WebClient.create(vertx)
 
     return Proxy.newProxyInstance(clazz.classLoader, arrayOf(clazz)) { _, method, args: Array<Any?> ->
-        val future = Future.future<HttpResponse<Buffer>>()
+        val future = Future.succeededFuture<HttpResponse<Buffer>>()
         client.postAbs(endpoint)
                 .apply { requestBuilder.build(this) }
                 .putHeader("content-type", "")
@@ -183,6 +201,7 @@ interface RequestBuilder {
     }
 }
 
+//For Java
 object ServiceProxyFactory {
     /**
      * Dynamically create the service proxy object for the given interface
@@ -193,7 +212,7 @@ object ServiceProxyFactory {
      * @return RPC proxy object implements T
      */
     @JvmStatic
-    fun <T : Any> getAsyncServiceProxy(vertx: Vertx, channel: String, name: String, clazz: Class<T>) = codes.unwritten.vertx.kotlin.rpc.getAsyncServiceProxy(vertx, channel, name, clazz)
+    fun <T : Any> getAsyncServiceProxy(vertx: Vertx, channel: String, name: String, clazz: Class<T>) = com.ooooonly.vertx.kotlin.rpc.getAsyncServiceProxy(vertx, channel, name, clazz)
 
     /**
      * Dynamically create the async service proxy object for the given interface
@@ -204,7 +223,7 @@ object ServiceProxyFactory {
      * @param name Name of the service
      * @return Async RPC proxy object implements T
      */
-    inline fun <reified T : Any> getServiceProxy(vertx: Vertx, channel: String, name: String) = codes.unwritten.vertx.kotlin.rpc.getServiceProxy<T>(vertx, channel, name)
+    inline fun <reified T : Any> getServiceProxy(vertx: Vertx, channel: String, name: String) = vertx.getServiceProxy<T>(channel, name)
 
     /**
      * Dynamically create the async service proxy object for the given interface
@@ -218,7 +237,7 @@ object ServiceProxyFactory {
      * @return Async RPC proxy object implements T
      */
     @JvmStatic
-    fun <T : Any> getAsyncHttpServiceProxy(vertx: Vertx, endpoint: String, name: String, requestBuilder: RequestBuilder, clazz: Class<T>): T = codes.unwritten.vertx.kotlin.rpc.getAsyncHttpServiceProxy(vertx, endpoint, name, requestBuilder, clazz)
+    fun <T : Any> getAsyncHttpServiceProxy(vertx: Vertx, endpoint: String, name: String, requestBuilder: RequestBuilder, clazz: Class<T>): T = com.ooooonly.vertx.kotlin.rpc.getAsyncHttpServiceProxy(vertx, endpoint, name, requestBuilder, clazz)
 
     /**
      * Dynamically create the async service proxy object for the given interface
@@ -231,7 +250,7 @@ object ServiceProxyFactory {
      * @return Async RPC proxy object implements T
      */
     @JvmStatic
-    fun <T : Any> getAsyncHttpServiceProxy(vertx: Vertx, endpoint: String, name: String, clazz: Class<T>): T = codes.unwritten.vertx.kotlin.rpc.getAsyncHttpServiceProxy(vertx, endpoint, name, RequestBuilder.defaultBuilder, clazz)
+    fun <T : Any> getAsyncHttpServiceProxy(vertx: Vertx, endpoint: String, name: String, clazz: Class<T>): T = com.ooooonly.vertx.kotlin.rpc.getAsyncHttpServiceProxy(vertx, endpoint, name, RequestBuilder.defaultBuilder, clazz)
 
     /**
      * Dynamically create the service proxy object for the given interface
@@ -241,5 +260,5 @@ object ServiceProxyFactory {
      * @param requestBuilder A function to customize HTTP request before it being sent
      * @return RPC proxy object implements T
      */
-    inline fun <reified T : Any> getHttpServiceProxy(vertx: Vertx, endpoint: String, name: String, crossinline requestBuilder: (HttpRequest<Buffer>) -> Any? = { _ -> }) = codes.unwritten.vertx.kotlin.rpc.getHttpServiceProxy<T>(vertx, endpoint, name, requestBuilder)
+    inline fun <reified T : Any> getHttpServiceProxy(vertx: Vertx, endpoint: String, name: String, crossinline requestBuilder: (HttpRequest<Buffer>) -> Any? = { _ -> }) = com.ooooonly.vertx.kotlin.rpc.getHttpServiceProxy<T>(vertx, endpoint, name, requestBuilder)
 }

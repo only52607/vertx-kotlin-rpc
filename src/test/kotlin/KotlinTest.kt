@@ -1,6 +1,6 @@
-import codes.unwritten.vertx.kotlin.rpc.RpcServerVerticle
-import codes.unwritten.vertx.kotlin.rpc.ServiceProxyFactory.getAsyncServiceProxy
-import codes.unwritten.vertx.kotlin.rpc.ServiceProxyFactory.getServiceProxy
+import com.ooooonly.vertx.kotlin.rpc.RpcServerVerticle
+import com.ooooonly.vertx.kotlin.rpc.ServiceProxyFactory.getAsyncServiceProxy
+import com.ooooonly.vertx.kotlin.rpc.ServiceProxyFactory.getServiceProxy
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.ext.unit.TestContext

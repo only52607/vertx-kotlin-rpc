@@ -1,7 +1,7 @@
-import codes.unwritten.vertx.kotlin.rpc.HttpRequest
-import codes.unwritten.vertx.kotlin.rpc.JsonRpcException
-import codes.unwritten.vertx.kotlin.rpc.QueryParam
-import codes.unwritten.vertx.kotlin.rpc.getHttpJsonRpcServiceProxy
+import com.ooooonly.vertx.kotlin.rpc.HttpRequest
+import com.ooooonly.vertx.kotlin.rpc.JsonRpcException
+import com.ooooonly.vertx.kotlin.rpc.QueryParam
+import com.ooooonly.vertx.kotlin.rpc.getHttpJsonRpcServiceProxy
 import io.vertx.core.Vertx
 import io.vertx.core.http.HttpMethod
 import io.vertx.ext.unit.TestContext

@@ -1,4 +1,4 @@
-package codes.unwritten.vertx.kotlin.rpc
+package com.ooooonly.vertx.kotlin.rpc
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -41,7 +41,7 @@ fun HttpRequest<Buffer>.noop() {}
 
 class JsonRpcException(val statusCode: Int = 0, message: String = "") : Throwable(message = message)
 
-inline fun <reified T : Any> getJsonProxyWithBlock(crossinline block: (JsonRpcRequest, codes.unwritten.vertx.kotlin.rpc.HttpRequest?, Continuation<Any?>) -> Unit) =
+inline fun <reified T : Any> getJsonProxyWithBlock(crossinline block: (JsonRpcRequest, com.ooooonly.vertx.kotlin.rpc.HttpRequest?, Continuation<Any?>) -> Unit) =
         Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, args: Array<Any?> ->
             val lastArg = args.lastOrNull()
             if (lastArg is Continuation<*>) {
@@ -61,8 +61,8 @@ inline fun <reified T : Any> getJsonProxyWithBlock(crossinline block: (JsonRpcRe
 
                 // Extract HttpRequest annotation if exist
                 val ann = method.annotations.firstOrNull {
-                    it is codes.unwritten.vertx.kotlin.rpc.HttpRequest
-                } as? codes.unwritten.vertx.kotlin.rpc.HttpRequest
+                    it is com.ooooonly.vertx.kotlin.rpc.HttpRequest
+                } as? com.ooooonly.vertx.kotlin.rpc.HttpRequest
 
                 // Call the block with the request and the continuation
                 block(JsonRpcRequest(method.name, mf, paramMap), ann, cont)
